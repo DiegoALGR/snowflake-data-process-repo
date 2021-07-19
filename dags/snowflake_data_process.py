@@ -5,6 +5,8 @@ from airflow.hooks.base_hook import BaseHook
 from airflow.contrib.operators.slack_webhook_operator import SlackWebhookOperator
 from airflow.operators.dummy_operator import DummyOperator
 
+countries = ['US', 'MX']
+
 SLACK_CONN_ID = 'slack_conn'
 slack_msg = "All tasks finished correctly :dash:"
 slack_webhook_token = BaseHook.get_connection(SLACK_CONN_ID).password
@@ -16,6 +18,20 @@ default_args = {
     'retry_delay': timedelta(seconds=2),
     'provide_context': True
 }
+
+def dropTop10GroupsByRatingTable(country):
+    return SnowflakeOperator(
+            task_id='drop-top-ten-groups-by-rating-'+country,
+            snowflake_conn_id='snowflake_conn',
+            sql=f"DROP TABLE IF EXISTS TOP_10_GROUPS_BY_RATING_{country};"
+        )
+
+def processTop10GroupsByRatingTable(country):
+    return SnowflakeOperator(
+            task_id='process-top-ten-groups-by-rating-'+country,
+            snowflake_conn_id='snowflake_conn',
+            sql=f"CREATE TABLE TOP_10_GROUPS_BY_RATING_{country} AS SELECT TOP 10 GROUP_ID, COUNTRY, RATING, MEMBERS FROM GROUPS WHERE RATING >= 4.9 AND JOIN_MODE = 'open' AND MEMBERS > 1000 AND COUNTRY = '{country}' ORDER BY RATING DESC;"
+        )
 
 with DAG('snowflake_data_process', 
         default_args=default_args,
@@ -30,7 +46,7 @@ with DAG('snowflake_data_process',
         t2 = SnowflakeOperator(
             task_id='drop-members-by-group-table',
             snowflake_conn_id='snowflake_conn',
-            sql='drop-current-members-by-groups-table.sql'
+            sql='drop-currents-members-by-groups-table.sql'
         )
 
         t3 = SnowflakeOperator(
@@ -88,3 +104,6 @@ with DAG('snowflake_data_process',
         t1 >> t4 >> t5 >> slack_message
         t1 >> t6 >> t7 >> slack_message
         t1 >> t8 >> t9 >> slack_message
+
+        for country in countries:
+            t1 >> dropTop10GroupsByRatingTable(country) >> processTop10GroupsByRatingTable(country) >> slack_message
