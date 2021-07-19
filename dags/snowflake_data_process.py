@@ -63,6 +63,18 @@ with DAG('snowflake_data_process',
             sql='process-not-horror-events-opened.sql'
         )
 
+        t8 = SnowflakeOperator(
+            task_id='drop-groups-averages-table',
+            snowflake_conn_id='snowflake_conn',
+            sql='drop-groups-averages-table.sql'
+        )
+
+        t9 = SnowflakeOperator(
+            task_id='process-groups-averages-information',
+            snowflake_conn_id='snowflake_conn',
+            sql='process-groups-averages-information.sql'
+        )
+
         slack_message = SlackWebhookOperator(
             task_id='send-message-to-slack',
             http_conn_id=SLACK_CONN_ID,
@@ -75,3 +87,4 @@ with DAG('snowflake_data_process',
         t1 >> t2 >> t3 >> slack_message
         t1 >> t4 >> t5 >> slack_message
         t1 >> t6 >> t7 >> slack_message
+        t1 >> t8 >> t9 >> slack_message
